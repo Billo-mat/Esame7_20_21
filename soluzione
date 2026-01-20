@@ -1,0 +1,82 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import pymc as pm
+import arviz as az
+
+# --- ESERCIZIO 1: Caricamento Dati ---
+# Il file data.csv ha una colonna di indice iniziale (0, 1, 2...)
+df = pd.read_csv('data.csv', index_col=0)
+
+# --- ESERCIZIO 2: Distribuzione della Lunghezza ---
+plt.figure(figsize=(10, 6))
+df['length'].hist(bins=20, edgecolor='black', alpha=0.7)
+plt.title('Distribuzione della Lunghezza di Sarchiapus Examinis')
+plt.xlabel('Lunghezza (cm)')
+plt.ylabel('Frequenza')
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.show()
+
+# --- ESERCIZIO 3: Statistiche per Età ---
+# Raggruppiamo per età e calcoliamo media e deviazione standard della lunghezza
+age_stats = df.groupby('age')['length'].agg(['mean', 'std'])
+print("Statistiche della lunghezza per ogni età:")
+print(age_stats.head())
+
+# --- ESERCIZIO 4: Aggiunta Genere ---
+# Genere 'male' se la prima lettera del DNA è 'A' o 'C', altrimenti 'female'
+df['gender'] = df['dna'].apply(lambda x: 'male' if x[0] in ['A', 'C'] else 'female')
+
+# --- ESERCIZIO 5: Distribuzione Lunghezza Maschi ---
+plt.figure(figsize=(10, 6))
+df[df['gender'] == 'male']['length'].hist(bins=20, color='skyblue', edgecolor='black')
+plt.title('Distribuzione della Lunghezza (Solo Maschi)')
+plt.xlabel('Lunghezza (cm)')
+plt.ylabel('Frequenza')
+plt.show()
+
+# --- ESERCIZIO 6: Funzione count_twins ---
+def count_twins(s: str, char: str) -> int:
+    """
+    Restituisce il numero di volte in cui la sottostringa composta dal 
+    carattere ripetuto due volte si trova nella stringa (sovrapposizioni incluse).
+    
+    >>> count_twins('ZXXZXXXZCCCX', 'X')
+    3
+    >>> count_twins('AAAAA', 'A')
+    4
+    """
+    target = char + char
+    count = 0
+    # Utilizziamo un ciclo per contare anche le occorrenze sovrapposte
+    for i in range(len(s) - 1):
+        if s[i:i+2] == target:
+            count += 1
+    return count
+
+# Verifica doctest (opzionale)
+import doctest
+doctest.testmod()
+
+# --- ESERCIZIO 7: Conteggio 'A' Twins ---
+# Applichiamo la funzione count_twins alla colonna DNA per il carattere 'A'
+df['a_twins'] = df['dna'].apply(lambda dna: count_twins(dna, 'A'))
+
+# --- ESERCIZIO 8: Modello Statistico PyMC3 ---
+with pm.Model() as model:
+    # Prior per la deviazione standard: Uniforme tra 0 e 10
+    sigma = pm.Uniform('sigma', lower=0, upper=10)
+    
+    # La media è assunta pari al numero di 'A' twins (mu variabile per individuo)
+    mu = df['a_twins'].values
+    
+    # Likelihood: la lunghezza osservata segue una Normale
+    length_obs = pm.Normal('length_obs', mu=mu, sigma=sigma, observed=df['length'].values)
+    
+    # Campionamento della distribuzione posteriore
+    trace = pm.sample(1000, tune=1000, return_inferencedata=True)
+
+# Plot della distribuzione della deviazione standard (sigma)
+az.plot_posterior(trace, var_names=['sigma'])
+plt.title('Distribuzione Posteriore della Deviazione Standard (Sigma)')
+plt.show()
